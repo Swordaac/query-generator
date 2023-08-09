@@ -1,6 +1,7 @@
+import ast
 import random
 import pandas as pd
-from typing import List, Union, Dict, Any
+from typing import Type, List, Union, Dict
 from enum import Enum
 
 import itertools
@@ -44,14 +45,12 @@ class operation:
     '''
     The abstract class operation
     '''
-
-    def __init__(self, df_name, leading, count=None):
+    def __init__(self, df_name, leading):
         '''
 
         :param df_name:
         :param leading: determine whether it is the first operation to be performed
         '''
-        self.count = count
         self.df_name = df_name
         self.leading = leading
 
@@ -61,9 +60,6 @@ class operation:
 
     def set_leading(self, b):
         self.leading = b
-
-    def set_count(self, c):
-        self.count = c
 
     def exec(self):
         return eval(self.to_str())
@@ -88,7 +84,6 @@ class condition():
     '''
     Refers to conditions like 'col1 > 20' in a particular dataframe
     '''
-
     def __init__(self, col_name, op: OP, num):
         '''
 
@@ -108,6 +103,7 @@ class condition():
         return condition(self.col, op, self.val)
         # self.op = op
 
+
     def __str__(self):
         return f"condition ({self.col} {self.op.value} {self.val} )"
 
@@ -118,8 +114,8 @@ class selection(operation):
 
     '''
 
-    def __init__(self, df_name, conditions, count=None, leading=True):
-        super().__init__(df_name, leading, count)
+    def __init__(self, df_name, conditions, leading=True):
+        super().__init__(df_name, leading)
         # self.df_name = df_name
         self.conditions = conditions
         # self.leading = leading
@@ -128,7 +124,7 @@ class selection(operation):
     def new_selection(self, new_cond):
         return selection(self.df_name, new_cond, self.leading)
 
-    def to_str(self, df2="F"):
+    def to_str(self):
         '''
 
         :return: a str that is executable in pandas grammar
@@ -138,13 +134,8 @@ class selection(operation):
         cur_condition = ""
 
         if len(self.conditions) == 1:
-            if df2.__eq__("F"):
-                cur_condition = cur_condition + self.df_name + "[" + "'" + self.conditions[0].col + "'" + "]" + " " + \
-                                self.conditions[0].op.value + " " + str(self.conditions[0].val)
-
-            else:
-                cur_condition = cur_condition + "df" + df2 + "[" + "'" + self.conditions[0].col + "'" + "]" + " " + \
-                                self.conditions[0].op.value + " " + str(self.conditions[0].val)
+            cur_condition = cur_condition + self.df_name + "[" + "'" + self.conditions[0].col + "'" + "]" + " " + \
+                            self.conditions[0].op.value + " " + str(self.conditions[0].val)
             res_str = res_str + "[" + cur_condition + "]"
             return res_str
 
@@ -153,12 +144,8 @@ class selection(operation):
             if type(condition) == OP_cond:
                 cur_condition += " " + condition.value + " "
             else:
-                if df2.__eq__("F"):
-                    cur_condition += "(" + self.df_name + "[" + "'" + cond.col + "'" + "]" + " " + cond.op.value + " " + str(
-                        cond.val) + ")"
-                else:
-                    cur_condition += "(" + "df" + df2 + "[" + "'" + cond.col + "'" + "]" + " " + cond.op.value + " " + str(
-                        cond.val) + ")"
+                cur_condition += "(" + self.df_name + "[" + "'" + cond.col + "'" + "]" + " " + cond.op.value + " " + str(
+                    cond.val) + ")"
 
         res_str = res_str + "[" + cur_condition + "]"
         return res_str
@@ -177,8 +164,7 @@ class merge(operation):
     '''
     df1.merge(df2, left_on = , right_on = )
     '''
-
-    def __init__(self, df_name, queries: 'pandas_query', count=None, on=None, left_on: str = None, right_on: str = None,
+    def __init__(self, df_name, queries: 'pandas_query', on=None, left_on: str = None, right_on: str = None,
                  leading=False):
         '''
 
@@ -189,7 +175,9 @@ class merge(operation):
         :param right_on:
         :param leading: if it is the leading operation, then true
         '''
-        super().__init__(df_name, leading, count)
+        super().__init__(df_name, leading)
+
+
 
         # assert (left_on == None and right_on == None) or on == None  ？？？
         if on is None:
@@ -245,16 +233,17 @@ class merge(operation):
 
 
 class projection(operation):
-    def __init__(self, df_name, columns: List[str], count=None, leading=True):
+    def __init__(self, df_name, columns: List[str], leading=True):
         '''
 
         :param df_name:
         :param columns: the desired columns that wants to be projected
         :param leading: whether it is the leading operation
         '''
-        super().__init__(df_name, leading, count)
+        super().__init__(df_name, leading)
         self.desire_columns = columns
         self.length = len(columns)
+
 
     def to_str(self):
         '''
@@ -285,7 +274,7 @@ class projection(operation):
 
 
 class group_by(operation):
-    def __init__(self, df_name, columns, count=None, other_args=None, leading=False):
+    def __init__(self, df_name, columns, other_args=None, leading=False):
         '''
 
         :param df_name:
@@ -293,10 +282,11 @@ class group_by(operation):
         :param other_args: additional arguments in pd.groupby
         :param leading:
         '''
-        super().__init__(df_name, leading, count)
+        super().__init__(df_name, leading)
 
-        self.columns = columns if isinstance(columns, List) else [columns]  # ？？？？
-        self.other_args = other_args  # ？？？
+
+        self.columns = columns if isinstance(columns, List) else [columns] #？？？？
+        self.other_args = other_args #？？？
 
     def set_columns(self, columns):
         self.columns = columns
@@ -321,14 +311,14 @@ class group_by(operation):
 
 
 class agg(operation):
-    def __init__(self, df_name, dict_columns: Union[str, Dict[str, str]], count=None, leading=True):
+    def __init__(self, df_name, dict_columns: Union[str, Dict[str, str]], leading=True):
         """
 
         :param df_name:
         :param leading:
         :param dict_columns:
         """
-        super().__init__(df_name, leading, count)
+        super().__init__(df_name, leading)
         self.dict_key_vals = dict_columns
 
     def to_str(self):
@@ -355,9 +345,7 @@ class agg(operation):
 class pandas_query():
     '''
     a pandas query in the intermediate representation
-    List[pandas_query] is the list of operations of this query
     '''
-
     def __init__(self, q_gen_query: List[operation], source: 'TBL_source', verbose=False):
 
         if verbose:
@@ -368,7 +356,7 @@ class pandas_query():
 
         # self.setup_query(q_gen_query)
 
-        self.pre_gen_query = self.setup_query(q_gen_query)  # 一个东西，只是一定可以run
+        self.pre_gen_query = self.setup_query(q_gen_query) #一个东西，只是一定可以run
         self.df_name = q_gen_query[0].df_name
         # self.available_columns = list(self._source_.source.columns)
         self.num_merges = 0
@@ -382,6 +370,7 @@ class pandas_query():
         ]
         # can_do_select
         self.query_string = self.get_query_string()
+        self.print_string = self.print_string()
         self.merged = False
 
         self.target = self.execute_query(self.pre_gen_query)  # df after operation
@@ -465,9 +454,9 @@ class pandas_query():
         possible_condition_columns = {}
         stats = ["min", "max", "count", "mean", "std", "25%", "50%", "75%"]
 
-        for key in possible_selection_columns:  # for example: key is col1, which is int datatype
-            possible_condition_columns[key] = []  # key 是col name，value是condition object list
-            description = self.get_source_description(source_df, key)  # ???
+        for key in possible_selection_columns:#for example: key is col1, which is int datatype
+            possible_condition_columns[key] = []#key 是col name，value是condition object list
+            description = self.get_source_description(source_df, key)#???
 
             for i in range(length):
                 if possible_selection_columns[key] == "int":
@@ -495,68 +484,66 @@ class pandas_query():
         return self._source_.source.copy()
 
     def setup_query(self, list_op: List[operation]):
-        '''
-        test if the list_op works for this query, if not then change it to a working format
+        '''检测目前的query是否可以run，否则改成可以的形式
 
         :param list_op: check if the columns will be changed after the operations
-        :return: a list of operations that functions properly
-        for example: project col1 and col2, then can't do further selections on other colums
+        :return:
+        select col1 and col2
         '''
         list_operation = list_op[:]
-        source_cols = list(self.get_source().columns)  # get all existing columns
+        source_cols = list(self.get_source().columns)#目前还有哪些col names
         changed = False
 
-        for i, operation_ in enumerate(list_operation):  # input list，i是index，operation_ 是object
+        for i, operation_ in enumerate(list_operation):#input list，i是index，operation_ 是object
             if isinstance(operation_, projection):
-                source_cols = operation_.desire_columns[:]  # desire_col是 col to be projected
+                source_cols = operation_.desire_columns[:]#desire_col是 col to be projected
                 changed = True
-            elif isinstance(operation_, group_by):  # 可能有其他的判断，再看一下merge的debug（比如project掉了col，之后却还是需要merge）
+            elif isinstance(operation_, group_by):#可能有其他的判断，再看一下merge的debug（比如project掉了col，之后却还是需要merge）
 
                 if isinstance(operation_, group_by) and changed:
-                    #     print("available columns changed!!!")
+                #     print("available columns changed!!!")
                     for g_col in operation_.columns:
                         if g_col not in source_cols:
                             col = random.choice(source_cols)
-                            # list_operation[i] = operation_.new_groupby([col])
-                            operation_.set_columns([col])  # only one group_by column from source column
+                        # list_operation[i] = operation_.new_groupby([col])
+                            operation_.set_columns([col])#only one group_by column from source column
                         # print(f"%%%%% source cols = {source_cols}, modified columns = {operation_.columns}")
             if i != 0:
                 operation_.set_leading(False)
         return list_operation
 
-    def gen_queries(self, maxrange=50) -> List[List[operation]]:
+    def gen_queries(self, maxrange = 50) -> List[List[operation]]:
         '''
 扩容生成list of query
         :param maxrange: threshold for selection
         :return: List of operation lists, an operation list can be directly transferred into a pandas query
-        
-        
+
+
         First, use set up query to make sure the query works well, such as project only on the existing columns, rather than having
         two projections that don't work
         Second, use gen query to generate a list of base query, and each query is actually a list of operations.
         '''
         generated_queries = []
-        for operation in self.pre_gen_query:  # a list of operations
+        for operation in self.pre_gen_query:# a list of operations
 
-            possible_new_operations = []  # possible operations for one categopry of operation，对于每一个operation扩容成一个同类型的list
+            possible_new_operations = []#possible operations for one categopry of operation，对于每一个operation扩容成一个同类型的list
 
             if isinstance(operation, selection):
-                possible_conditions_dict = self.possible_selections()  # return a condition dict, col name is key, list of conditions is value
+                possible_conditions_dict = self.possible_selections()#return a condition dict, col name is key, list of conditions is value
 
                 possible_selection_operations = []
                 print("===== generating selection combinations =====")
                 for i in range(maxrange):
 
-                    selection_length = random.randrange(1, len(possible_conditions_dict.keys()) + 2, 1)  # ???
+                    selection_length = random.randrange(1, len(possible_conditions_dict.keys()) + 2, 1)#???
                     cur_conditions = []
                     for j in range(selection_length):
-                        cur_key = random.choice(list(possible_conditions_dict.keys()))  # key is col name
-                        cur_condition = random.choice(
-                            possible_conditions_dict[cur_key])  # cur_condition is list of conditions
+                        cur_key = random.choice(list(possible_conditions_dict.keys()))#key is col name
+                        cur_condition = random.choice(possible_conditions_dict[cur_key])#cur_condition is list of conditions
                         cur_conditions.append(cur_condition)
                         cur_conditions.append(random.choice([OP_cond.OR, OP_cond.AND]))
 
-                    cur_conditions = cur_conditions[:-1]  # ???
+                    cur_conditions = cur_conditions[:-1]#???
                     possible_selection_operations.append(cur_conditions)
 
                 for conds in possible_selection_operations:
@@ -585,7 +572,7 @@ class pandas_query():
             print("===== possible operations generated =====")
         new_generated_queries = []
         # indexes = [0]*len(generated_queries)
-        new_generated_queries = itertools.product(*generated_queries)  # op1.1*op2.3*op3.2
+        new_generated_queries = itertools.product(*generated_queries)#op1.1*op2.3*op3.2
         print("======= *** start iterating generated queries *** ======")
         l = [item for item in new_generated_queries]
         print(" *** done ***")
@@ -595,12 +582,12 @@ class pandas_query():
         '''random缩小gen_queries
 
         :param out: maximum inflated queries out
-        :return: list of pandas queries
+        :return: list of operation lists
         '''
         res = []
         new_queries = self.gen_queries()
 
-        random.shuffle(new_queries)  # 先shuffle，避免只截取了col1的condition
+        random.shuffle(new_queries)#先shuffle，避免只截取了col1的condition
         new_queries = new_queries[:out]
 
         print(f" ==== testing source with {len(new_queries)} queries ==== ")
@@ -680,7 +667,7 @@ class pandas_query():
         # else:
 
     def generate_possible_column_combinations(self, operation: projection, generate_num=200):
-        columns = self.get_source().columns  # 本质上不应该用source，而是到目前为止的df的现存col，可是memory占用太多了
+        columns = self.get_source().columns#本质上不应该用source，而是到目前为止的df的现存col，可是memory占用太多了
         possible_columns = []
 
         print("===== generating column combinations =====")
@@ -690,8 +677,7 @@ class pandas_query():
 
         else:
 
-            res = [list(i) for i in
-                   list(itertools.combinations(columns, operation.length))]  # 比如7选3，output所有的combination
+            res = [list(i) for i in list(itertools.combinations(columns, operation.length))]#比如7选3，output所有的combination
             if operation.length > 1 and operation.length < len(list(columns)):
                 res = res + [list(i) for i in list(itertools.combinations(columns, operation.length - 1))]
                 res = res + [list(i) for i in list(itertools.combinations(columns, operation.length + 1))]
@@ -708,11 +694,6 @@ class pandas_query():
         # print(possible_new_conditions)
         new_conds = []
         clocks = [0] * len(possible_new_conditions)
-
-
-
-
-
 
         for c in range(generate_num):
             possible_cond = []
@@ -740,11 +721,29 @@ class pandas_query():
         des = self.get_source_description(self.get_source(), col)
         return des
 
+
+
     def get_query_string(self):
         strs = ""
         for q in self.pre_gen_query:
             strs += q.to_str()
 
+
+
+        return strs
+    def print_string(self):
+        strs = ""
+        for q in self.pre_gen_query:
+            if isinstance(q, selection):
+                strs += q.to_str()
+            elif isinstance(q, projection):
+                strs +="\n"+q.to_str()
+            elif isinstance(q, group_by):
+                strs +="\n"+q.to_str()
+            elif isinstance(q, agg):
+                strs +="\n"+q.to_str()
+            elif isinstance(q, merge):
+                strs +="\n"+q.to_str()
         return strs
 
     def get_source_description(self, dfa: pd.DataFrame, col):
@@ -759,9 +758,7 @@ class pandas_query():
 
 
 class pandas_query_pool():
-    result_queries: list[Any]
-
-    def __init__(self, queries: List[pandas_query], count=0, self_join=False, verbose=True):
+    def __init__(self, queries: List[pandas_query], self_join=False, verbose=True):
         '''
 merge然后再扩容
         :param queries: list of queries in type pandas_query
@@ -769,150 +766,39 @@ merge然后再扩容
         :param verbose: print the processing steps
         '''
         self.queries = queries
-        self.count = count
         self.self_join = self_join
         self.result_queries = []
         self.verbose = verbose
 
         self.un_merged_queries = queries[:]
 
-    # def unravel(self,query:pandas_query):
-    #     count=0
-    #     for q in self.result_queries:
-    #         for s in q.pre_gen_query:
-    #
-    #             strs=s.to_str()
-    #             if isinstance(s,merge):
-    #                 for other in s.queries.pre_gen_query:
-    #                     b=max(self.unravel(other))
-    #                     print(f"df{b} = {strs} \n")
-    #                     count+=1
-    #                     return count
-    #
-    #
-    #
-    #             print(f"df{count} = {strs} \n")
-    #             count+=1
-
     def save_merged_examples(self, dir, filename):
         count = 0
         f = open(f"{dir}/{filename}.txt", "a")
-        res = {}
-        q = []
-
-        # for m in self.result_queries:
-        #     for op in m.pre_gen_query:
-        #
-        #         count += 1
-        #         op.set_count(count)
-        #         if isinstance(op, merge):
-        #             q.append(op)
-        #             res[count]=[]
-        #     while (len(q) != 0):
-        #         for i in range(len(q)):
-        #             current = q.pop(0)
-        #         # do smth to merge
-        #             for ops in current.queries.pre_gen_query:
-        #                 ops.set_count(count)
-        #
-        #                 res[current.count].append(count)
-        #                 count += 1
-        #
-        #
-        #                 if ops is merge:
-        #                     q.push(ops)
-        def unravel(query: pandas_query):
-            wstrs = query.pre_gen_query
-            try:
-                p = eval(wstrs)
-            except Exception:
-                print("Wrong")
-
-            for s in query.pre_gen_query:
-
-                strs = s.to_str()
-                if isinstance(s, merge):
-                    counter = self.count - 1
-
-                    # b = max(unravel(other))
-                    unravel(s.queries)
-
-                    print(f"df{self.count} = df{counter}.merge(df{self.count - 1}, left_on={s.left_on}, right_on={s.right_on}) \n")
-                    self.count += 1
-                    continue
-
-                #
-
-                #print(f"df{self.count} = {strs} \n")
-
-
-
-                if s.leading:
-                    s1 = s.to_str()
-                    print(f"df{self.count} = {s1} \n")  # strs
-
-                else:
-                    if isinstance(s, selection):
-                        s2 = s.to_str(str(self.count - 1))
-                    else:
-                        s2 = s.to_str()
-                    print(f'df{self.count} = df{self.count - 1}' + s2)  # q.pre_gen[i].to_str(count-1)
-                self.count += 1
-
-        #
-        #
-        #
-        for m in self.result_queries:
-            count = unravel(m)
-
-        # for q in self.result_queries:
-        #     # strs = q.
-        #     for op in q.pre_gen_query:
-        #         if not isinstance(op,merge):
-        #             f.write(f"df{count} = {strs} \n")
-        #             count +=1
-        #         else:
-        #             save_merged_examples(self, dir, filename)
-        #     strs = q.query_string
-        #     f.write(f"df{count} = {strs} \n")
-        #     count += 1
+        for q in self.result_queries:
+            # strs = q.
+            strs = q.query_string
+            f.write(f"df{count} = {strs} \n")
+            count += 1
         print(f" ##### Successfully write the merged queries into file {dir}/{filename}.txt #####")
         f.close()
 
     def save_unmerged_examples(self, dir, filename):
         count = 0
         f = open(f"{dir}/{filename}.txt", "a")
-
         for q in self.un_merged_queries:
             # strs = q.
-            strs = q.query_string
-            # what is query string==panadas query format
+            strs = q.print_string()
+            #what is query string==panadas query format
             try:
-                p = eval(q.query_string)
+                p = eval(q.print_string())
             except Exception:
                 print("%%%%%%%%%%% An Unexpected Exception has occured %%%%%%%%%%%%%%%%")
-            # op1 = q.pre_gen_query[0]
-            # if not(isinstance(op1,selection)):
-            #     continue#the first is always selection operation
-            for i in range(len(q.pre_gen_query)):
+            print(f"df{count} = {strs} \n")
 
-                if i == 0:
-                    s1 = q.pre_gen_query[i].to_str()
-                    f.write(f"df{count} = {s1} \n")  # strs
-                    count += 1
-                else:
-                    if isinstance(q.pre_gen_query[i], selection):
-                        s2 = q.pre_gen_query[i].to_str(str(count - 1))
-                    else:
-                        s2 = q.pre_gen_query[i].to_str()
-                    f.write(f'df{count} = df{count - 1}' + s2)  # q.pre_gen[i].to_str(count-1)
-                    count += 1
+            #f.write\
 
-            # f.write\
-
-            # print(f"df{count} = {strs} \n")
-
-            # count += 1
+            count += 1
         print(f" ##### Successfully write the unmerged queries into file {dir}/{filename}.txt #####")
         f.close()
 
@@ -930,7 +816,7 @@ merge然后再扩容
 
     def check_merge_left_right(self, q1: pandas_query, q2: pandas_query):
 
-        if "series" in str(type(q1.get_target())) or "series" in str(type(q2.get_target())):  # what is this for? ***
+        if "series" in str(type(q1.get_target())) or "series" in str(type(q2.get_target())):#what is this for? ***
             return []
 
         col1 = list(q1.get_target().columns)
@@ -962,31 +848,30 @@ merge然后再扩容
                 for key_and_ref in q1_foreign_keys[col]:
 
                     if key_and_ref[0] == col:
-                        
+
                         return [col, key_and_ref[0]]
         '''
         return []
 
-    def generate_possible_merge_operations(self, max_merge=3, max_q=100):
+    def generate_possible_merge_operations(self, max_merge=3, max_q=5000):
         cur_queries = self.queries[:]
-        random.shuffle(cur_queries)  # why??? ***
+        random.shuffle(cur_queries)#why??? ***
         k = 0
         res_hash = {}
         q_generated = 0
         while True:
-            if k >= max_merge:  # 最多三个merge
+            if k >= max_merge:#最多三个merge
                 break
-            for i in tqdm(range(len(cur_queries) - 1)):  # tqdm是进度条
-                for j in range(i + 1, len(cur_queries)):  # i，j是两个不同的query，进行比较
+            for i in tqdm(range(len(cur_queries) - 1)):#tqdm是进度条
+                for j in range(i + 1, len(cur_queries)):#i，j是两个不同的query，进行比较
 
-                    if q_generated > max_q:  # how is it different from k
+                    if q_generated > max_q:#how is it different from k
                         break
 
-                    if str(i) + "+" + str(j) not in res_hash:  # res_hash存进去已经merge的index pair，如果不重复的话再进行下次merge
+                    if str(i) + "+" + str(j) not in res_hash:#res_hash存进去已经merge的index pair，如果不重复的话再进行下次merge
 
                         q1 = cur_queries[i]
                         q2 = cur_queries[j]
-                        q3 = cur_queries[j+1]
 
                         # print(f"q1 df name = {q1}")
                         # print(f"q2 df_name = {q2}")
@@ -995,8 +880,7 @@ merge然后再扩容
                             # print("#### queries with same source detected, skipping to the next queries ####")
                             continue
 
-                        merge_differenet_keys = self.check_merge_left_right(q1,
-                                                                            q2)  # check if the forgein key is still there
+                        merge_differenet_keys = self.check_merge_left_right(q1, q2)#check if the forgein key is still there
 
                         if len(merge_differenet_keys) > 0:
                             if self.verbose:
@@ -1004,8 +888,9 @@ merge然后再扩容
                             operations = list(q1.pre_gen_query)[:]
 
                             operations.append(merge(df_name=q1.df_name, queries=q2, left_on=merge_differenet_keys[0],
-                                                    right_on=merge_differenet_keys[
-                                                        1]))  # append merge,然后list（q1, merge(q2))
+                                                    right_on=merge_differenet_keys[1]))#append merge,然后list（q1, merge(q2))
+
+
 
                             strs = ""
 
@@ -1025,7 +910,7 @@ merge然后再扩容
                                     if self.verbose:
                                         print("no rows exist with the above selection")
                                     continue
-                            except Exception:  # what is this
+                            except Exception:#what is this
                                 continue
                             else:
                                 if self.verbose:
@@ -1033,6 +918,8 @@ merge然后再扩容
                             try:
                                 res_df = q1.get_target().merge(q2.get_target(), left_on=merge_differenet_keys[0],
                                                                right_on=merge_differenet_keys[1])
+
+
 
                                 columns = list(t.columns)
                                 rand = random.random()
@@ -1065,12 +952,11 @@ merge然后再扩容
 
                         else:
                             ###################################################
-                            cols = self.check_merge_on(q1, q2)  # what is this for? ***
+                            cols = self.check_merge_on(q1, q2)# what is this for? ***
 
                             if cols and max(q1.num_merges, q2.num_merges) < 3 and self.self_join:
                                 # print(cols)
                                 operations = list(q1.pre_gen_query)[:]
-                               # operations2 = list(q2.pre_gen_query[:])
 
                                 operations.append(merge(df_name=q1.df_name, queries=q2, on=cols))
 
@@ -1222,20 +1108,18 @@ class TBL_source():
     def gen_base_queries(self) -> List[pandas_query]:
         '''
         Customized generation with base queries, can be modified to fit in various circumstances
-        :return: List[pandas_query]
+        :return:
         '''
 
         # queries = []
-        q1 = pandas_query(q_gen_query=[self.get_a_selection(), self.get_a_projection(), self.get_a_aggregation()],
+        q1 = pandas_query(q_gen_query=[self.get_a_selection()], source=self)
+        q2 = pandas_query(q_gen_query=[self.get_a_selection(), self.get_a_projection(), self.get_a_aggregation()],
                           source=self)
-        q2 = pandas_query(q_gen_query=[self.get_a_selection(), self.get_a_projection(), self.get_a_selection()],
-                          source=self)
-
         q3 = pandas_query(q_gen_query=[self.get_a_selection(), self.get_a_projection(), self.get_a_groupby(),
                                        self.get_a_aggregation()], source=self)
         # print(q3.get_query_str(q3.pre_gen_query))
         q4 = pandas_query(q_gen_query=[self.get_a_selection(), self.get_a_aggregation()], source=self)
-        queries = [q2]
+        queries = [q1, q2, q3, q4]
         return queries
 
 
@@ -1359,6 +1243,7 @@ def run_TPCH():
     pq12 = pandas_query(q12, source=part)
     pq13 = pandas_query(q13, source=partsupp)
 
+
     allqueries = [pq1, pq2, pq3, pq4, pq5, pq6, pq7, pq8, pq9, pq10, pq11, pq12, pq13]
     # allqueries = [pq4]
     res = []
@@ -1410,6 +1295,7 @@ if __name__ == "__main__":
 
     all_source = [c, l, n, o, p, ps, r, s]
 
+
     allqueries = []
     for a in all_source:
         allqueries += a.gen_base_queries()
@@ -1427,7 +1313,9 @@ if __name__ == "__main__":
 
     pandas_queries_list = pandas_query_pool(res)
     pandas_queries_list.shuffle_queries()
-    pandas_queries_list.save_unmerged_examples(dir=Export_Rout, filename="unmerged_queries")
+    pandas_queries_list.save_unmerged_examples(dir=Export_Rout, filename="unmerged_queries_auto_sf0001")
     pandas_queries_list.generate_possible_merge_operations()
     pandas_queries_list.save_merged_examples(dir=Export_Rout, filename="merged_queries_auto_sf0001")
-    # pandas_queries_list.unravel(pandas_queries_list.result_queries)
+
+
+
