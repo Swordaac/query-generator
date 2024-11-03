@@ -24,8 +24,6 @@
 #### An example is listed in main, started from line 1235.
 
 
-2022.12.15, Dailun Li
-
 
 Bugs reported:
 
